@@ -1,15 +1,213 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>AR.js A-Frame Location-based</title>
-<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.7/three.js/build/ar-threex-location-only.js'></script>
-<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js'></script>
+    <meta charset="utf-8">
+    <title>AR.js Location-based with Improved Accuracy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+        #debug-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 999;
+            border-radius: 5px;
+            max-width: 300px;
+        }
+        #distance-info {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial;
+            z-index: 999;
+        }
+    </style>
 </head>
-<body>
-<a-scene vr-mode-ui='enabled: false' arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false' renderer='antialias: true; alpha: true'>
-    <a-camera gps-new-camera='gpsMinDistance: 5'></a-camera>
-    <a-box color="red" gps-new-entity-place="latitude: -22.979750; longitude: -43.232894" depth="10" height="10" width="10"></a-box>
-</a-scene>
+<body style="margin: 0; overflow: hidden;">
+    <div id="debug-panel">
+        <div>Status: <span id="status">Initializing...</span></div>
+        <div>Your Lat: <span id="user-lat">-</span></div>
+        <div>Your Lon: <span id="user-lon">-</span></div>
+        <div>Accuracy: <span id="accuracy">-</span>m</div>
+        <div>Heading: <span id="heading">-</span>°</div>
+    </div>
+    <div id="distance-info">
+        Distance to object: <span id="distance">-</span>m
+    </div>
+
+    <a-scene
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
+        renderer="logarithmicDepthBuffer: true; precision: high; antialias: true; alpha: true;">
+        
+        <!-- Camera with GPS tracking -->
+        <a-camera 
+            id="camera"
+            gps-new-camera="
+                simulateLatitude: -22.979750;
+                simulateLongitude: -43.232894;
+                simulateAltitude: 0;
+                positionMinAccuracy: 100;
+                gpsMinDistance: 5;
+                gpsTimeInterval: 0;
+                alert: true;">
+        </a-camera>
+
+        <!-- Target location marker - Using your coordinates -->
+        <!-- Main visible cube -->
+        <a-entity
+            id="main-cube"
+            material="color: red; opacity: 0.9"
+            geometry="primitive: box; depth: 5; height: 5; width: 5"
+            gps-new-entity-place="latitude: -22.979750; longitude: -43.232894"
+            scale="1 1 1"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 5000">
+        </a-entity>
+
+        <!-- Ground reference plane -->
+        <a-entity
+            material="color: yellow; opacity: 0.5"
+            geometry="primitive: plane; width: 10; height: 10"
+            rotation="-90 0 0"
+            gps-new-entity-place="latitude: -22.979750; longitude: -43.232894">
+        </a-entity>
+
+        <!-- Vertical pole for better visibility -->
+        <a-entity
+            material="color: blue; opacity: 0.8"
+            geometry="primitive: cylinder; radius: 0.5; height: 20"
+            gps-new-entity-place="latitude: -22.979750; longitude: -43.232894">
+        </a-entity>
+
+        <!-- Text label -->
+        <a-text
+            value="Target Location"
+            look-at="[gps-new-camera]"
+            scale="10 10 10"
+            color="white"
+            align="center"
+            gps-new-entity-place="latitude: -22.979750; longitude: -43.232894">
+        </a-text>
+    </a-scene>
+
+    <script>
+        // Debug information panel
+        let userLat = 0;
+        let userLon = 0;
+        const targetLat = -22.979750;
+        const targetLon = -43.232894;
+
+        // Function to calculate distance between two GPS points
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // Earth's radius in meters
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c;
+        }
+
+        // Update debug panel
+        function updateDebugInfo(position) {
+            userLat = position.coords.latitude;
+            userLon = position.coords.longitude;
+            
+            document.getElementById('user-lat').textContent = userLat.toFixed(6);
+            document.getElementById('user-lon').textContent = userLon.toFixed(6);
+            document.getElementById('accuracy').textContent = position.coords.accuracy.toFixed(1);
+            
+            if (position.coords.heading !== null) {
+                document.getElementById('heading').textContent = position.coords.heading.toFixed(1);
+            }
+            
+            const distance = calculateDistance(userLat, userLon, targetLat, targetLon);
+            document.getElementById('distance').textContent = distance.toFixed(1);
+            
+            document.getElementById('status').textContent = 'Active';
+            document.getElementById('status').style.color = '#00ff00';
+        }
+
+        // Set up GPS watching with high accuracy
+        if ('geolocation' in navigator) {
+            document.getElementById('status').textContent = 'Requesting GPS...';
+            
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            };
+
+            navigator.geolocation.watchPosition(
+                updateDebugInfo,
+                (error) => {
+                    document.getElementById('status').textContent = 'GPS Error: ' + error.message;
+                    document.getElementById('status').style.color = '#ff0000';
+                    console.error('GPS Error:', error);
+                },
+                options
+            );
+        } else {
+            document.getElementById('status').textContent = 'GPS not available';
+            document.getElementById('status').style.color = '#ff0000';
+        }
+
+        // Handle device orientation for better compass accuracy
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (event) => {
+                if (event.webkitCompassHeading) {
+                    // iOS
+                    document.getElementById('heading').textContent = event.webkitCompassHeading.toFixed(1);
+                } else if (event.alpha) {
+                    // Android
+                    document.getElementById('heading').textContent = (360 - event.alpha).toFixed(1);
+                }
+            });
+        }
+
+        // Log AR.js events for debugging
+        window.addEventListener('gps-entity-place-added', (event) => {
+            console.log('Entity added at:', event.detail);
+        });
+
+        window.addEventListener('gps-camera-update-position', (event) => {
+            console.log('Camera position updated:', event.detail);
+        });
+
+        // Alert when scene is loaded
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            console.log('A-Frame scene loaded');
+            
+            // Try to improve initial GPS lock
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log('Initial GPS position:', position.coords);
+                    },
+                    (error) => {
+                        console.error('Initial GPS error:', error);
+                    },
+                    { enableHighAccuracy: true }
+                );
+            }
+        });
+    </script>
 </body>
 </html>
